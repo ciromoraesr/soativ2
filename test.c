@@ -23,8 +23,9 @@ int count_files(const char *path) {
     return count;
 }
 
-void monitor_directory(const char *path) {
+void monitor_directory(const char *path, const char *text) {
     int size = count_files(path);
+    
     if (size < 0) {
         return; 
     }
@@ -41,6 +42,7 @@ void monitor_directory(const char *path) {
             break; 
         }
         if (size1 != size) {
+            //aqui também entraria ação das threads operárias
             printf("File count changed!\n");
             size = size1;
             vat = realloc(vat, size * sizeof(time_t)); 
@@ -99,7 +101,11 @@ void monitor_directory(const char *path) {
     free(vat);
 }
 
-int main() {
-    monitor_directory("bin");
+int main(int argc, char* argv[]) {
+    if (argc > 1) { 
+        char *s = argv[1]; 
+        monitor_directory("bin", s);
+    }
+    
     return 0;
 }
