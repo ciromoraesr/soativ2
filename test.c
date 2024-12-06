@@ -21,6 +21,7 @@ typedef enum {
 typedef struct {
     char *file_path;
     int countocur;
+    int file_count;
 } RankVar;
 
 // Worker thread data structure
@@ -37,6 +38,7 @@ typedef struct {
 WorkerThread workers[NUM_WORKERS];
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t rank_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t id = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t queue_cond = PTHREAD_COND_INITIALIZER;
 char **file_queue = NULL;
 int queue_size = 0;
@@ -108,7 +110,35 @@ void* worker_thread(void *arg) {
 
     return NULL;
 }
+RankVar *rank_data = NULL;
+void* ranker(void *arg){
+    while(!stop_monitoring){
+    pthread_mutex_lock(&id);
 
+    int *file_count = (int *)arg;
+    for (int i = 0; i < *file_count; i++) {
+        for (int j = i + 1; j < *file_count; j++) { 
+            if (rank_data[i].countocur < rank_data[j].countocur) {
+                RankVar temp = rank_data[i];
+                rank_data[i] = rank_data[j];
+                rank_data[j] = temp;
+            }
+        }
+    }
+
+    // Print sorted results
+    printf("\nRanked Files:\n");
+    for (int i = 0; i < *file_count; i++) {
+        if (rank_data[i].file_path) {
+            printf("Position %d: %s, Count: %d\n", 
+                    i, 
+                    rank_data[i].file_path, 
+                    rank_data[i].countocur);
+        }
+    }
+    pthread_mutex_unlock(&id);
+    }
+}
 // Function to find an idle worker and assign it a file
 int assign_file_to_worker(const char *file_path, RankVar *rank_data) {
     pthread_mutex_lock(&queue_mutex);
@@ -154,7 +184,7 @@ void monitor_directory(const char *path, const char *text) {
         pthread_create(&thread_ids[i], NULL, worker_thread, &workers[i]);
     }
     int file_count = 0;
-    RankVar *rank_data = NULL;
+    
 
     while (!stop_monitoring) {
         DIR *dirp = opendir(path);
@@ -187,6 +217,7 @@ void monitor_directory(const char *path, const char *text) {
             for (int i = 0; i < current_file_count; i++) {
                 rank_data[i].file_path = NULL;
                 rank_data[i].countocur = 0;
+                rank_data[i].file_count = current_file_count;
                 last_modified[i] = 0;
             }
             file_count = current_file_count;
@@ -224,28 +255,31 @@ void monitor_directory(const char *path, const char *text) {
         while (completed_threads < total_files_to_process) {
             usleep(100000);  // Short sleep to prevent busy waiting
         }
+        pthread_t id;
+        pthread_mutex_init(&id, NULL);
+        int ret = pthread_create(&id, NULL, ranker,(void *)&file_count );
+        pthread_mutex_destroy(&id);
 
-        // Sort files by occurrence count
-        for (int i = 0; i < file_count; i++) {
-            for (int j = i + 1; j < file_count; j++) { 
-                if (rank_data[i].countocur < rank_data[j].countocur) {
-                    RankVar temp = rank_data[i];
-                    rank_data[i] = rank_data[j];
-                    rank_data[j] = temp;
-                }
-            }
-        }
+        // for (int i = 0; i < file_count; i++) {
+        //     for (int j = i + 1; j < file_count; j++) { 
+        //         if (rank_data[i].countocur < rank_data[j].countocur) {
+        //             RankVar temp = rank_data[i];
+        //             rank_data[i] = rank_data[j];
+        //             rank_data[j] = temp;
+        //         }
+        //     }
+        // }
 
-        // Print sorted results
-        printf("\nRanked Files:\n");
-        for (int i = 0; i < file_count; i++) {
-            if (rank_data[i].file_path) {
-                printf("Position %d: %s, Count: %d\n", 
-                       i, 
-                       rank_data[i].file_path, 
-                       rank_data[i].countocur);
-            }
-        }
+        // // Print sorted results
+        // printf("\nRanked Files:\n");
+        // for (int i = 0; i < file_count; i++) {
+        //     if (rank_data[i].file_path) {
+        //         printf("Position %d: %s, Count: %d\n", 
+        //                i, 
+        //                rank_data[i].file_path, 
+        //                rank_data[i].countocur);
+        //     }
+        // }
 
         sleep(5);  // Check every 5 seconds
     }
