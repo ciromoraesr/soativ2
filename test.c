@@ -68,7 +68,6 @@ void* worker_thread(void *arg) {
         // If we have a file to process
         if (worker->state == THREAD_WORKING && worker->file_path) {
             // Process file
-            printf("Thread %d processing file: %s\n", worker->id, worker->file_path);
             
             FILE *p = fopen(worker->file_path, "r");
             if (p) {
@@ -125,13 +124,11 @@ void* ranker(void *arg){
             }
         }
     }
-
-    // Print sorted results
     printf("\nRanked Files:\n");
     for (int i = 0; i < *file_count; i++) {
         if (rank_data[i].file_path) {
-            printf("Position %d: %s, Count: %d\n", 
-                    i, 
+            printf("Posicao %d: %s, Contagem: %d\n", 
+                    i+1, 
                     rank_data[i].file_path, 
                     rank_data[i].countocur);
         }
@@ -139,21 +136,17 @@ void* ranker(void *arg){
     pthread_mutex_unlock(&id);
     }
 }
-// Function to find an idle worker and assign it a file
 int assign_file_to_worker(const char *file_path, RankVar *rank_data) {
     pthread_mutex_lock(&queue_mutex);
 
-    // Find an idle worker
     for (int i = 0; i < NUM_WORKERS; i++) {
         pthread_mutex_lock(&workers[i].mutex);
         
         if (workers[i].state == THREAD_IDLE) {
-            // Assign file to this worker
             workers[i].file_path = strdup(file_path);
             workers[i].rank_data = rank_data;
             workers[i].state = THREAD_WORKING;
             
-            // Signal the worker thread
             pthread_cond_signal(&workers[i].cond);
             
             pthread_mutex_unlock(&workers[i].mutex);
@@ -164,7 +157,6 @@ int assign_file_to_worker(const char *file_path, RankVar *rank_data) {
         pthread_mutex_unlock(&workers[i].mutex);
     }
 
-    // No idle workers, add to queue
     file_queue = realloc(file_queue, (queue_size + 1) * sizeof(char*));
     file_queue[queue_size++] = strdup(file_path);
 
@@ -173,8 +165,9 @@ int assign_file_to_worker(const char *file_path, RankVar *rank_data) {
 }
 
 void monitor_directory(const char *path, const char *text) {
-    // Initialize worker threads
     pthread_t thread_ids[NUM_WORKERS];
+    pthread_t ranker_thread;
+
     for (int i = 0; i < NUM_WORKERS; i++) {
         workers[i].id = i;
         workers[i].state = THREAD_IDLE;
@@ -183,8 +176,11 @@ void monitor_directory(const char *path, const char *text) {
         pthread_cond_init(&workers[i].cond, NULL);
         pthread_create(&thread_ids[i], NULL, worker_thread, &workers[i]);
     }
+
     int file_count = 0;
-    
+
+    // Launch the ranker thread
+    pthread_create(&ranker_thread, NULL, ranker, (void *)&file_count);
 
     while (!stop_monitoring) {
         DIR *dirp = opendir(path);
@@ -192,12 +188,11 @@ void monitor_directory(const char *path, const char *text) {
             perror("Failed to open directory");
             break;
         }
-        file_count = 0;
 
+        file_count = 0;
         struct dirent *entry;
         struct stat path_stat;
         static time_t *last_modified = NULL;
-        
 
         // Count files
         int current_file_count = 0;
@@ -209,7 +204,7 @@ void monitor_directory(const char *path, const char *text) {
         }
         rewinddir(dirp);
 
-        // Reallocate last_modified if needed
+        // Allocate or reallocate memory for rank data and timestamps
         if (current_file_count != file_count) {
             rank_data = realloc(rank_data, current_file_count * sizeof(RankVar));
             last_modified = realloc(last_modified, current_file_count * sizeof(time_t));
@@ -223,7 +218,6 @@ void monitor_directory(const char *path, const char *text) {
             file_count = current_file_count;
         }
 
-        // Reset tracking variables
         completed_threads = 0;
         total_files_to_process = 0;
 
@@ -238,7 +232,6 @@ void monitor_directory(const char *path, const char *text) {
 
             if (stat(full_path, &path_stat) == 0) {
                 if (last_modified[count] != path_stat.st_mtime) {
-                    // Create a copy of the full path for the rank_data
                     rank_data[count].file_path = strdup(full_path);
                     rank_data[count].countocur = 0;
                     
@@ -249,55 +242,35 @@ void monitor_directory(const char *path, const char *text) {
                 count++;
             }
         }
+
         closedir(dirp);
 
-        // Wait for all threads to complete processing
+        // Wait for workers to complete current batch
         while (completed_threads < total_files_to_process) {
-            usleep(100000);  // Short sleep to prevent busy waiting
+            usleep(100000);  
         }
-        pthread_t id;
-        pthread_mutex_init(&id, NULL);
-        int ret = pthread_create(&id, NULL, ranker,(void *)&file_count );
-        pthread_mutex_destroy(&id);
 
-        // for (int i = 0; i < file_count; i++) {
-        //     for (int j = i + 1; j < file_count; j++) { 
-        //         if (rank_data[i].countocur < rank_data[j].countocur) {
-        //             RankVar temp = rank_data[i];
-        //             rank_data[i] = rank_data[j];
-        //             rank_data[j] = temp;
-        //         }
-        //     }
-        // }
-
-        // // Print sorted results
-        // printf("\nRanked Files:\n");
-        // for (int i = 0; i < file_count; i++) {
-        //     if (rank_data[i].file_path) {
-        //         printf("Position %d: %s, Count: %d\n", 
-        //                i, 
-        //                rank_data[i].file_path, 
-        //                rank_data[i].countocur);
-        //     }
-        // }
-
-        sleep(5);  // Check every 5 seconds
+        sleep(5);  
     }
-    
-    // Cleanup
+
+    // Join worker threads
     for (int i = 0; i < NUM_WORKERS; i++) {
         pthread_join(thread_ids[i], NULL);
         pthread_mutex_destroy(&workers[i].mutex);
         pthread_cond_destroy(&workers[i].cond);
     }
 
-    // Free allocated memory
+    // Clean up rank data
     for (int i = 0; i < file_count; i++) {
         free(rank_data[i].file_path);
     }
     free(rank_data);
-    
+
+    // Signal ranker thread to exit
+    pthread_cancel(ranker_thread);
+    pthread_join(ranker_thread, NULL);
 }
+
 
 int main() {
     monitor_directory(DEFAULT_PATH, SEARCH_TEXT);
