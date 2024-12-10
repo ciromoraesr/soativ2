@@ -38,16 +38,13 @@ pthread_mutex_t rank_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t id_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t queue_cond = PTHREAD_COND_INITIALIZER;
 
-
 char **file_queue = NULL;
 int queue_size = 0;
-int stop_monitoring = 0;
+volatile int stop_monitoring = 0;
 int completed_threads = 0;
 int total_files_to_process = 0;
 RankVar *rank_data = NULL;
 
-
-//thread operária
 void* worker_thread(void *arg) {
     WorkerThread *worker = (WorkerThread*)arg;
 
@@ -100,17 +97,13 @@ void* worker_thread(void *arg) {
 
     return NULL;
 }
-//thread ranking
+
 void* ranker(void *arg) {
     while (!stop_monitoring) {
         pthread_mutex_lock(&id_mutex);
 
         int *file_count = (int *)arg;
-        if(*file_count == 0){
-            printf("Arquivo vazio");
-        }
-        else{
-            if (completed_threads == total_files_to_process) {
+        if(*file_count > 0 && completed_threads == total_files_to_process) {
             for (int i = 0; i < *file_count; i++) {
                 for (int j = i + 1; j < *file_count; j++) {
                     if (rank_data[i].countocur < rank_data[j].countocur) {
@@ -122,15 +115,16 @@ void* ranker(void *arg) {
             }
 
             printf("\nArquivos Ranqueados:\n");
-            for (int i = 0; i < *file_count; i++) {
-                if (rank_data[i].file_path) {
+            for (int i = 0; i < 10 && i < *file_count; i++) {
+                if (strlen(rank_data[i].file_path) > 0 && rank_data[i].countocur >= 0) {
                     printf("Posicao %d: %s, Contagem: %d\n", 
                         i + 1, 
                         rank_data[i].file_path, 
                         rank_data[i].countocur);
-                    }
                 }
             }
+            
+            completed_threads = 0;
         }
         pthread_mutex_unlock(&id_mutex);
         sleep(5); 
@@ -170,7 +164,7 @@ int assign_file_to_worker(const char *file_path, RankVar *rank_data) {
     pthread_mutex_unlock(&queue_mutex);
     return 0;
 }
-//thread despachante
+
 void monitor_directory(const char *path, const char *text) {
     pthread_t thread_ids[NUM_WORKERS];
     pthread_t ranker_thread;
@@ -220,7 +214,6 @@ void monitor_directory(const char *path, const char *text) {
             file_count = current_file_count;
         }
 
-        completed_threads = 0;
         total_files_to_process = 0;
 
         int count = 0;
@@ -248,10 +241,11 @@ void monitor_directory(const char *path, const char *text) {
         }
 
         sleep(5);
-        }
+    }
 
     stop_monitoring = 1;
     for (int i = 0; i < NUM_WORKERS; i++) {
+        pthread_cond_signal(&workers[i].cond);
         pthread_join(thread_ids[i], NULL);
         pthread_mutex_destroy(&workers[i].mutex);
         pthread_cond_destroy(&workers[i].cond);
@@ -274,7 +268,6 @@ int main(int argc, char * argv[]) {
     if(argc ==2){
         strcpy(SEARCH_TEXT, argv[1]);
         monitor_directory(DEFAULT_PATH, argv[1]);
-
     }else{
         printf("too many or too little arguments");
     }
