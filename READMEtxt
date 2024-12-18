@@ -3,7 +3,7 @@
 Alunos: Ciro Moraes, Giulianna Ellen e Hugo Souza
 
 Visão Geral: 
-O projeto em linguagem C consiste em ser  uma ferramenta de busca de arquivos multithread que verifica um diretório especificado (`bin` por padrão) para arquivos que contenham uma determinada sequência de pesquisa. Ele utiliza vários threads de trabalho para processar arquivos simultaneamente e os classifica com base na contagem de ocorrências da sequência de pesquisa. O programa ajusta dinamicamente o número de arquivos sendo processados, exibe os arquivos classificados e manipula as alterações de diretório durante o tempo de execução.
+O projeto em linguagem C consiste em ser  uma ferramenta de busca de arquivos multithread que verifica um diretório especificado (`bin` por padrão, altere no código para analisar uma pasta diferente) para arquivos que contenham uma determinada sequência de pesquisa. Ele utiliza 3 threads para processar arquivos simultaneamente, sendo essas as threads de monitoramento, as operárias(10) e a thread ranking que os classifica com base na contagem de ocorrências da sequência de pesquisa. O programa ajusta dinamicamente o número de arquivos sendo processados, exibe os arquivos classificados e manipula as alterações de diretório durante o tempo de execução.
 
 Principais recursos: 
 - Multithreading com threads de trabalho para processar vários arquivos simultaneamente. 
@@ -20,19 +20,19 @@ Requisitos :
 Compilação :
 - Para compilar o programa, use o seguinte comando: 
 
-    gcc  def.c -o def -lpthread 
+    gcc  def.c -o paralegrep -lpthread 
 
 Uso:
  O programa recebe um argumento de linha de comando: 
 
-   ./def <"palavra"> 
+   ./paralegrep <palavra> 
 
-Onde  <"palavra">  é o texto a ser pesquisado nos arquivos localizados no diretório `bin` (diretório padrão). O programa verificará todos os arquivos neste diretório e contará as ocorrências da string fornecida. Os arquivos são então classificados com base na contagem de ocorrências. 
+Onde  <palavra>  é o texto a ser pesquisado nos arquivos localizados no diretório `bin` (diretório padrão). O programa verificará todos os arquivos neste diretório e contará as ocorrências da string fornecida. Os arquivos são então classificados com base na contagem de ocorrências. 
 
      Exemplo:
 
       bash
-       ./def caixa 
+       ./paralegrep caixa 
 
        Isso pesquisará a string `"caixa"` em todos os arquivos dentro do diretório `bin` e classificará os arquivos com base no número de ocorrências.
 
@@ -72,7 +72,3 @@ Gerenciamento de Memória:
 
   A memória para os caminhos dos arquivos, threads de trabalho e dados de classificação é alocada dinamicamente durante a execução e liberada quando o programa termina. O programa também lida com a duplicação de caminhos de arquivos e sincronização de forma apropriada para evitar vazamentos de memória e erros.
 
-Tratamento de Erros:
-
-- Falhas de Alocação de Memória: O programa irá terminar com uma mensagem de erro se a alocação de memória falhar (por exemplo, ao realocar memória para a fila de arquivos ou dados de classificação).
-- Falhas ao Abrir Arquivos: Caso o programa encontre problemas ao abrir um arquivo, ele irá ignorar o arquivo e prosseguir para o próximo.
