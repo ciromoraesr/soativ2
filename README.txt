@@ -20,7 +20,7 @@ Requisitos :
 Compilação :
 - Para compilar o programa, use o seguinte comando: 
 
-    gcc  def.c -o paralegrep -lpthread 
+    gcc  projso.c -o paralegrep -lpthread 
 
 Uso:
  O programa recebe um argumento de linha de comando: 
